@@ -3,6 +3,9 @@
 """
 Delta College R25 Excel Tool
 
+TODO:
+Don't combine reservations if there is a class in between them
+
 ----
 Requirements:
 - Python 2.7
@@ -17,7 +20,7 @@ import re
 
 
 def format_time(t):
-  return t.strftime("%H:%M")
+  return t.strftime("%I:%M %p")
 
 def time_to_datetime(t):
   current = date.today()
@@ -49,6 +52,13 @@ class Event:
         time_list.append(abs(time_to_datetime(t1) - time_to_datetime(t2)))
     return sorted(time_list)[0]
   
+  def before(self, event):
+    # returns a boolean depending on if self is before event
+    if self.start < event.start:
+      return True
+    else:
+      return False
+  
   def set_end(self, t):
     # Set end time
     if type(t) is time:
@@ -66,9 +76,17 @@ def combine_reservations(rooms):
     combined = True
     while(combined):
       combined = False
-      for event in rooms[room]:
-        pass
-  
+      for e1 in rooms[room]:
+        for e2 in rooms[room]:
+          if e1 != e2 and not combined:
+            #Don't compare the event to itself
+            if e1.time_difference(e2) < timedelta(hours=2) and e1.resource == e2.resource:
+              combined = True
+              if e1.before(e2):
+                e1.end = e2.end
+              else:
+                e1.start = e2.start
+              rooms[room].remove(e2)
 
 
 def get_room_events(sheet):
@@ -96,14 +114,38 @@ def get_reservations(rooms):
   return reservations
 
 
-wb = load_workbook('reservations.xlsx')
+#e1 = Event()
+#e1.start = unicode_to_time(u"12:00 PM")
+#e1.end = unicode_to_time(u"1:55 PM")
+#print e1
+#e2 = Event()
+#e2.start = unicode_to_time(u"2:00 PM")
+#e2.end = unicode_to_time(u"3:55 PM")
+#print e2
+##print e1.time_difference(e2) < timedelta(hours=2)
+#print e2.before(e1)
+
+
+wb = load_workbook('today.xlsx')
 sheet = wb.active
 
 
 rooms = get_room_events(sheet)
 
-for event in rooms["CWNG_C110"]:
-  print(event)
 
 print len(get_reservations(rooms))
+combine_reservations(rooms)
+
+reservations = get_reservations(rooms)
+print len(reservations)
+
+
+reservations = sorted(reservations, key=lambda e: e.start)
+result = ""
+for event in reservations:
+  result += "%s\n" % (event)
+
+with open("result.txt", "w+") as f:
+  f.write(result)
+
 
