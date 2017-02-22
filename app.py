@@ -13,6 +13,7 @@ Requirements:
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
+from openpyxl.styles import Color, PatternFill
 from datetime import time
 from datetime import *
 from collections import defaultdict
@@ -199,6 +200,13 @@ for event in reservations:
       template["%s%i" % (resource_col, i)] = 'X'
   # Move to the next row
   i += 1
+
+red_color = PatternFill(start_color='FFFF9999', end_color='FFFF9999', fill_type='solid')
+for i in range(len(reservations)):
+  if i % 2 == 0:
+    for n in range(15):
+      template[("%s%i") % (chr(n+65), i + 2)].fill = red_color
+
 template_book.save('result.xlsx')
 
 
