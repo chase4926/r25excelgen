@@ -5,6 +5,7 @@ Delta College R25 Excel Tool
 
 TODO:
 Don't combine reservations if there is a class in between them
+Allow for multiple resource requests!
 
 ----
 Requirements:
@@ -129,28 +130,56 @@ def get_reservations(rooms):
   return reservations
 
 
+def format_space(space):
+  result = space.split('_', 1)[1]
+  return result.split(' ', 1)[0]
 
 
-wb = load_workbook('today.xlsx')
+def get_resource_column(resource):
+  return {
+    'Laptop wifi': 'D',
+    'Computer / Dell Laptop': 'D',
+    'Laptop Wireless Cart #1 (20)': 'E',
+    'Laptop Wireless Cart #2 (20)': 'E',
+    'Laptop Wireless Cart #3 (20)': 'F',
+    'Clickers 25': 'E',
+  }.get(resource, 'H') # Laptop
+
+
+wb = load_workbook('reservations.xlsx')
 sheet = wb.active
 
 
 rooms = get_room_events(sheet)
 
-
-print len(get_reservations(rooms))
+print("There are %i total reservations." % len(get_reservations(rooms)))
 combine_reservations(rooms)
 
 reservations = get_reservations(rooms)
-print len(reservations)
+print("After being combined, there are %i reservations." % len(reservations))
 
 
 reservations = sorted(reservations)
-result = ""
-for event in reservations:
-  result += "%s\n" % (event)
 
-with open("result.txt", "w+") as f:
-  f.write(result)
+
+template_book = load_workbook('template.xlsx')
+template = template_book.active
+
+
+i = 2 # Row to start on
+for event in reservations:
+  # Write event details to row
+  template["B%i" % i] = format_space(event.space)
+  template["K%i" % i] = format_time(event.start)
+  template["M%i" % i] = format_time(event.end)
+  resource_col = get_resource_column(event.resource)
+  if resource_col == 'H':
+    template["H%i" % i] = event.resource
+  else:
+    template["%s%i" % (resource_col, i)] = 'X'
+  # Move to the next row
+  i += 1
+template_book.save('result.xlsx')
+
 
 
