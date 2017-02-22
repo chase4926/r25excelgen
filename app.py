@@ -52,19 +52,34 @@ class Event:
         time_list.append(abs(time_to_datetime(t1) - time_to_datetime(t2)))
     return sorted(time_list)[0]
   
-  def before(self, event):
-    # returns a boolean depending on if self is before event
-    if self.start < event.start:
-      return True
-    else:
-      return False
-  
   def set_end(self, t):
     # Set end time
     if type(t) is time:
       self.end = t
     else:
       self.end = unicode_to_time(t)
+  
+  def __lt__(a, b):
+    if a.start < b.start:
+      return True
+    elif a.start == b.start:
+      if a.end <= b.end:
+        return True
+      else:
+        return False
+    else:
+      return False
+  
+  def __gt__(a, b):
+    if a.start > b.start:
+      return True
+    elif a.start == b.start:
+      if a.end > b.end:
+        return True
+      else:
+        return False
+    else:
+      return False
   
   def __repr__(self):
     return "%s - %s, %s, %s" % (format_time(self.start), format_time(self.end), self.space, self.resource)
@@ -82,7 +97,7 @@ def combine_reservations(rooms):
             #Don't compare the event to itself
             if e1.time_difference(e2) < timedelta(hours=2) and e1.resource == e2.resource:
               combined = True
-              if e1.before(e2):
+              if e1 < e2: # Checks if e1 takes place before e2
                 e1.end = e2.end
               else:
                 e1.start = e2.start
@@ -114,16 +129,6 @@ def get_reservations(rooms):
   return reservations
 
 
-#e1 = Event()
-#e1.start = unicode_to_time(u"12:00 PM")
-#e1.end = unicode_to_time(u"1:55 PM")
-#print e1
-#e2 = Event()
-#e2.start = unicode_to_time(u"2:00 PM")
-#e2.end = unicode_to_time(u"3:55 PM")
-#print e2
-##print e1.time_difference(e2) < timedelta(hours=2)
-#print e2.before(e1)
 
 
 wb = load_workbook('today.xlsx')
@@ -140,7 +145,7 @@ reservations = get_reservations(rooms)
 print len(reservations)
 
 
-reservations = sorted(reservations, key=lambda e: e.start)
+reservations = sorted(reservations)
 result = ""
 for event in reservations:
   result += "%s\n" % (event)
