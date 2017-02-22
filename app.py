@@ -5,7 +5,6 @@ Delta College R25 Excel Tool
 
 TODO:
 Don't combine reservations if there is a class in between them
-Allow for multiple resource requests!
 
 ----
 Requirements:
@@ -37,6 +36,13 @@ class Event:
     self.resource = None
     self.start = None
     self.end = None
+  
+  def add_resource(self, resource):
+    if self.resource == None:
+      self.resource = [resource]
+    else:
+      if not resource in self.resource:
+        self.resource.append(resource)
   
   def set_start(self, t):
     #Set start time
@@ -107,6 +113,7 @@ def combine_reservations(rooms):
 
 def get_room_events(sheet):
   rooms = defaultdict(list)
+  last_event = None
   for row in tuple(sheet.rows):
     if row[0].value != None:
       if type(row[0].value) is time:
@@ -116,8 +123,19 @@ def get_room_events(sheet):
           event.set_end(row[1].value) # End datetime.time
           event.space = row[5].value.encode('ASCII', 'ignore') # Space
           if row[6].value != None:
-            event.resource = row[6].value.encode('ASCII', 'ignore') # Resource
+            event.add_resource(row[6].value.encode('ASCII', 'ignore')) # Resource
           rooms[event.space].append(event)
+          # Set last_event in case there are additional resources
+          last_event = event
+    else:
+      # Check if there was an event prior to this
+      if last_event != None:
+        if row[6].value != None:
+          #Add resource to last event
+          last_event.add_resource(row[6].value.encode('ASCII', 'ignore'))
+        else:
+          # Trailed off the end of the list
+          last_event = None
   return rooms
 
 
@@ -143,6 +161,7 @@ def get_resource_column(resource):
     'Laptop Wireless Cart #2 (20)': 'E',
     'Laptop Wireless Cart #3 (20)': 'F',
     'Clickers 25': 'E',
+    'Wireless Presenter': 'G',
   }.get(resource, 'H') # Laptop
 
 
@@ -172,11 +191,12 @@ for event in reservations:
   template["B%i" % i] = format_space(event.space)
   template["K%i" % i] = format_time(event.start)
   template["M%i" % i] = format_time(event.end)
-  resource_col = get_resource_column(event.resource)
-  if resource_col == 'H':
-    template["H%i" % i] = event.resource
-  else:
-    template["%s%i" % (resource_col, i)] = 'X'
+  for resource in event.resource:
+    resource_col = get_resource_column(resource)
+    if resource_col == 'H':
+      template["H%i" % i] = resource
+    else:
+      template["%s%i" % (resource_col, i)] = 'X'
   # Move to the next row
   i += 1
 template_book.save('result.xlsx')
