@@ -93,8 +93,9 @@ class Event:
     return "%s - %s, %s, %s" % (format_time(self.start), format_time(self.end), self.space, self.resource)
 
 
-def combine_reservations(rooms):
-  # Input a rooms dict, combines the inputted dict
+def combine_reservations(r):
+  # Input a rooms dict, outputs a new dict with combined events
+  rooms = copy_rooms(r)
   for room in rooms:
     combined = True
     while(combined):
@@ -103,13 +104,14 @@ def combine_reservations(rooms):
         for e2 in rooms[room]:
           if e1 != e2 and not combined:
             #Don't compare the event to itself
-            if e1.time_difference(e2) < timedelta(hours=2) and e1.resource == e2.resource:
+            if (e1.resource != None) and (e1.resource == e2.resource) and (e1.time_difference(e2) < timedelta(hours=2)):
               combined = True
               if e1 < e2: # Checks if e1 takes place before e2
                 e1.end = e2.end
               else:
                 e1.start = e2.start
               rooms[room].remove(e2)
+  return rooms
 
 
 def get_room_events(sheet):
@@ -149,6 +151,37 @@ def get_reservations(rooms):
   return reservations
 
 
+def get_delivery_time(rooms, event):
+  events = rooms[event.space]
+  events = events[0:events.index(event)]
+  if len(events) > 0:
+    end_event = events[-1]
+    end_time = end_event.end
+    if event.time_difference(end_event) < timedelta(minutes=15):
+      return "@%s" % format_time(end_time)
+    else:
+      return "%s-%s" % (format_time(end_time), format_time(event.start))
+  else:
+    return 'OPEN'
+
+
+def get_pickup_time(rooms, event):
+  events = rooms[event.space]
+  after_events = list()
+  for e in events:
+    if event.end < e.start:
+      after_events.append(e)
+  if len(after_events) > 0:
+    start_event = after_events[0]
+    start_time = start_event.start
+    if event.time_difference(start_event) < timedelta(minutes=15):
+      return "@%s" % format_time(start_time)
+    else:
+      return "%s-%s" % (format_time(event.end), format_time(start_time))
+  else:
+    return 'OPEN'
+
+
 def format_space(space):
   result = space.split('_', 1)[1]
   return result.split(' ', 1)[0]
@@ -167,16 +200,28 @@ def get_resource_column(resource):
   }.get(resource, 'H') # Laptop
 
 
+def count_events(rooms):
+  i = 0
+  for room in rooms:
+    for event in rooms[room]:
+      i += 1
+  return i
+
+
+def copy_rooms(rooms):
+  new_rooms = defaultdict(list)
+  for room in rooms:
+    new_rooms[room] = rooms[room][:]
+  return new_rooms
+
+
 wb = load_workbook('reservations.xlsx')
 sheet = wb.active
 
 
 rooms = get_room_events(sheet)
-
 print("There are %i total reservations." % len(get_reservations(rooms)))
-combine_reservations(rooms)
-
-reservations = get_reservations(rooms)
+reservations = get_reservations(combine_reservations(rooms))
 print("After being combined, there are %i reservations." % len(reservations))
 
 
@@ -199,6 +244,8 @@ for event in reservations:
       template["H%i" % i] = resource
     else:
       template["%s%i" % (resource_col, i)] = 'X'
+  template["J%i" % i] = get_delivery_time(rooms, event)
+  template["N%i" % i] = get_pickup_time(rooms, event)
   # Move to the next row
   i += 1
 
