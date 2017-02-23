@@ -160,8 +160,9 @@ def get_resource_column(resource):
     'Computer / Dell Laptop': 'D',
     'Laptop Wireless Cart #1 (20)': 'E',
     'Laptop Wireless Cart #2 (20)': 'E',
-    'Laptop Wireless Cart #3 (20)': 'F',
-    'Clickers 25': 'E',
+    'Laptop Wireless Cart #3 (20)': 'E',
+    'Clickers 25': 'F',
+    'Clickers 52': 'F',
     'Wireless Presenter': 'G',
   }.get(resource, 'H') # Laptop
 
