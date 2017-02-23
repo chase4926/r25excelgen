@@ -255,7 +255,7 @@ for i in range(len(reservations)):
     for n in range(15):
       template[("%s%i") % (chr(n+65), i + 2)].fill = red_color
 
-template_book.save('result.xlsx')
+template_book.save("%s.xlsx" % (datetime.now() + timedelta(days=1)).strftime("%b-%d"))
 
 
 
