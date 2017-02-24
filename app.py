@@ -98,132 +98,182 @@ class Event:
     return "%s - %s, %s, %s" % (format_time(self.start), format_time(self.end), self.space, self.resource)
 
 
-def combine_reservations(r):
-  # Input a rooms dict, outputs a new dict with combined events
-  rooms = copy_rooms(r)
-  for room in rooms:
-    combined = True
-    while(combined):
-      combined = False
-      for e1 in rooms[room]:
-        for e2 in rooms[room]:
-          if e1 != e2 and not combined:
-            #Don't compare the event to itself
-            if (e1.resource != None) and (e1.resource == e2.resource) and (e1.time_difference(e2) < timedelta(hours=2)):
-              combined = True
-              if e1 < e2: # Checks if e1 takes place before e2
-                e1.end = e2.end
-              else:
-                e1.start = e2.start
-              rooms[room].remove(e2)
-  return rooms
+class EventBook:
+  def load_workbook(self, filename):
+    self.workbook = load_workbook(filename)
+    self.sheet = self.workbook.active
+    self.rooms = self.get_room_events()
+    print("There are %i total reservations." % len(self.get_reservations(self.rooms)))
+    self.reservations = self.get_reservations(self.combine_reservations(self.rooms))
+    print("After being combined, there are %i reservations." % len(self.reservations))
+    self.reservations = sorted(self.reservations)
+    for event in self.reservations:
+      self.process_delivery_time(event)
+      self.process_pickup_time(event)
 
-
-def get_room_events(sheet):
-  rooms = defaultdict(list)
-  last_event = None
-  for row in tuple(sheet.rows):
-    if row[0].value != None:
-      if type(row[0].value) is time:
-        if row[5].value != None:
-          event = Event()
-          event.set_start(row[0].value) # Start datetime.time
-          event.set_end(row[1].value) # End datetime.time
-          event.space = row[5].value.encode('ASCII', 'ignore') # Space
+  def get_room_events(self):
+    rooms = defaultdict(list)
+    last_event = None
+    for row in tuple(self.sheet.rows):
+      if row[0].value != None:
+        if type(row[0].value) is time:
+          if row[5].value != None:
+            event = Event()
+            event.set_start(row[0].value) # Start datetime.time
+            event.set_end(row[1].value) # End datetime.time
+            event.space = row[5].value.encode('ASCII', 'ignore') # Space
+            if row[6].value != None:
+              event.add_resource(row[6].value.encode('ASCII', 'ignore')) # Resource
+            rooms[event.space].append(event)
+            # Set last_event in case there are additional resources
+            last_event = event
+      else:
+        # Check if there was an event prior to this
+        if last_event != None:
           if row[6].value != None:
-            event.add_resource(row[6].value.encode('ASCII', 'ignore')) # Resource
-          rooms[event.space].append(event)
-          # Set last_event in case there are additional resources
-          last_event = event
+            #Add resource to last event
+            last_event.add_resource(row[6].value.encode('ASCII', 'ignore'))
+          else:
+            # Trailed off the end of the list
+            last_event = None
+    return rooms
+  
+  def get_reservations(self, rooms):
+    reservations = list()
+    for room in rooms:
+      for event in rooms[room]:
+        if event.resource != None:
+          reservations.append(event)
+    return reservations
+  
+  def copy_rooms(self, rooms):
+    new_rooms = defaultdict(list)
+    for room in rooms:
+      new_rooms[room] = rooms[room][:]
+    return new_rooms
+  
+  def combine_reservations(self, r):
+    # Input a rooms dict, outputs a new dict with combined events
+    rooms = self.copy_rooms(r)
+    for room in rooms:
+      combined = True
+      while(combined):
+        combined = False
+        for e1 in rooms[room]:
+          for e2 in rooms[room]:
+            if e1 != e2 and not combined:
+              #Don't compare the event to itself
+              if (e1.resource != None) and (e1.resource == e2.resource) and (e1.time_difference(e2) < timedelta(hours=2)):
+                combined = True
+                if e1 < e2: # Checks if e1 takes place before e2
+                  e1.end = e2.end
+                else:
+                  e1.start = e2.start
+                rooms[room].remove(e2)
+    return rooms
+
+  def process_pickup_time(self, event):
+    events = self.rooms[event.space]
+    after_events = list()
+    for e in events:
+      if event.end < e.start:
+        after_events.append(e)
+    if len(after_events) > 0:
+      start_event = after_events[0]
+      start_time = start_event.start
+      if event.time_difference(start_event) < timedelta(minutes=15):
+        event.pickup_window = [start_time]
+      else:
+        event.pickup_window = [event.end, start_time]
     else:
-      # Check if there was an event prior to this
-      if last_event != None:
-        if row[6].value != None:
-          #Add resource to last event
-          last_event.add_resource(row[6].value.encode('ASCII', 'ignore'))
+      event.pickup_window = ['OPEN']
+  
+  def process_delivery_time(self, event):
+    events = self.rooms[event.space]
+    events = events[0:events.index(event)]
+    if len(events) > 0:
+      end_event = events[-1]
+      end_time = end_event.end
+      if event.time_difference(end_event) < timedelta(minutes=15):
+        event.delivery_window = [end_time]
+      else:
+        event.delivery_window = [end_time, event.start]
+    else:
+      event.delivery_window = ['OPEN']
+  
+  def format_pickup_time(self, event):
+    window = event.pickup_window
+    if len(window) == 1:
+      if window[0] == 'OPEN':
+        return 'OPEN'
+      else:
+        return "@%s" % format_time(window[0])
+    else:
+      return "%s-%s" % (format_time(window[0]), format_time(window[1]))
+  
+  def format_delivery_time(self, event):
+    window = event.delivery_window
+    if len(window) == 1:
+      if window[0] == 'OPEN':
+        return 'OPEN'
+      else:
+        return "@%s" % format_time(window[0])
+    else:
+      return "%s-%s" % (format_time(window[0]), format_time(window[1]))
+  
+  def format_space(self, space):
+    result = space.split('_', 1)[1]
+    return result.split(' ', 1)[0]
+  
+  def get_resource_column(self, resource):
+    return {
+      'Laptop wifi': 'D',
+      'Computer / Dell Laptop': 'D',
+      'Laptop Wireless Cart #1 (20)': 'E',
+      'Laptop Wireless Cart #2 (20)': 'E',
+      'Laptop Wireless Cart #3 (20)': 'E',
+      'Clickers 25': 'F',
+      'Clickers 52': 'F',
+      'Wireless Presenter': 'G',
+    }.get(resource, 'H') # Misc
+  
+  def save_workbook(self, template_filename='template.xlsx'):
+    template_book = load_workbook(template_filename)
+    template = template_book.active
+    
+    i = 2 # Row to start on
+    for event in self.reservations:
+      # Write event details to row
+      template["B%i" % i] = self.format_space(event.space)
+      template["K%i" % i] = format_time(event.start)
+      template["M%i" % i] = format_time(event.end)
+      for resource in event.resource:
+        resource_col = self.get_resource_column(resource)
+        if resource_col == 'H':
+          template["H%i" % i] = resource
         else:
-          # Trailed off the end of the list
-          last_event = None
-  return rooms
-
-
-def get_reservations(rooms):
-  reservations = list()
-  for room in rooms:
-    for event in rooms[room]:
-      if event.resource != None:
-        reservations.append(event)
-  return reservations
-
-
-def get_delivery_time(rooms, event):
-  events = rooms[event.space]
-  events = events[0:events.index(event)]
-  if len(events) > 0:
-    end_event = events[-1]
-    end_time = end_event.end
-    if event.time_difference(end_event) < timedelta(minutes=15):
-      event.delivery_window = [end_time]
-      return "@%s" % format_time(end_time)
-    else:
-      event.delivery_window = [end_time, event.start]
-      return "%s-%s" % (format_time(end_time), format_time(event.start))
-  else:
-    event.delivery_window = ['OPEN']
-    return 'OPEN'
-
-
-def get_pickup_time(rooms, event):
-  events = rooms[event.space]
-  after_events = list()
-  for e in events:
-    if event.end < e.start:
-      after_events.append(e)
-  if len(after_events) > 0:
-    start_event = after_events[0]
-    start_time = start_event.start
-    if event.time_difference(start_event) < timedelta(minutes=15):
-      event.pickup_window = [start_time]
-      return "@%s" % format_time(start_time)
-    else:
-      event.pickup_window = [event.end, start_time]
-      return "%s-%s" % (format_time(event.end), format_time(start_time))
-  else:
-    event.pickup_window = ['OPEN']
-    return 'OPEN'
-
-
-def format_space(space):
-  result = space.split('_', 1)[1]
-  return result.split(' ', 1)[0]
-
-
-def get_resource_column(resource):
-  return {
-    'Laptop wifi': 'D',
-    'Computer / Dell Laptop': 'D',
-    'Laptop Wireless Cart #1 (20)': 'E',
-    'Laptop Wireless Cart #2 (20)': 'E',
-    'Laptop Wireless Cart #3 (20)': 'E',
-    'Clickers 25': 'F',
-    'Clickers 52': 'F',
-    'Wireless Presenter': 'G',
-  }.get(resource, 'H') # Laptop
-
-
-def count_events(rooms):
-  i = 0
-  for room in rooms:
-    for event in rooms[room]:
+          template["%s%i" % (resource_col, i)] = 'X'
+      template["J%i" % i] = self.format_delivery_time(event)
+      template["N%i" % i] = self.format_pickup_time(event)
+      # Move to the next row
       i += 1
-  return i
+    
+    # Save Excel Document for processed events
+    red_color = PatternFill(start_color='FFFF9999', end_color='FFFF9999', fill_type='solid')
+    for i in range(len(self.reservations)):
+      if i % 2 == 0:
+        for n in range(15):
+          template[("%s%i") % (chr(n+65), i + 2)].fill = red_color
+    
+    template_book.save("%s.xlsx" % (datetime.now() + timedelta(days=1)).strftime("%b-%d"))
 
 
-def copy_rooms(rooms):
-  new_rooms = defaultdict(list)
-  for room in rooms:
-    new_rooms[room] = rooms[room][:]
-  return new_rooms
+#def count_events(rooms):
+  #i = 0
+  #for room in rooms:
+    #for event in rooms[room]:
+      #i += 1
+  #return i
 
 
 def get_current_deliveries(reservations, td=2):
@@ -272,53 +322,9 @@ def get_current_pickups(reservations, td=2):
   return result
 
 
-wb = load_workbook('reservations.xlsx')
-sheet = wb.active
-
-
-rooms = get_room_events(sheet)
-print("There are %i total reservations." % len(get_reservations(rooms)))
-reservations = get_reservations(combine_reservations(rooms))
-print("After being combined, there are %i reservations." % len(reservations))
-
-
-reservations = sorted(reservations)
-
-
-template_book = load_workbook('template.xlsx')
-template = template_book.active
-
-
-i = 2 # Row to start on
-for event in reservations:
-  # Write event details to row
-  template["B%i" % i] = format_space(event.space)
-  template["K%i" % i] = format_time(event.start)
-  template["M%i" % i] = format_time(event.end)
-  for resource in event.resource:
-    resource_col = get_resource_column(resource)
-    if resource_col == 'H':
-      template["H%i" % i] = resource
-    else:
-      template["%s%i" % (resource_col, i)] = 'X'
-  template["J%i" % i] = get_delivery_time(rooms, event)
-  template["N%i" % i] = get_pickup_time(rooms, event)
-  # Move to the next row
-  i += 1
-
-
-
-def save_workbook(workbook):
-  workbook.save("%s.xlsx" % (datetime.now() + timedelta(days=1)).strftime("%b-%d"))
-
-# Save Excel Document for processed events
-red_color = PatternFill(start_color='FFFF9999', end_color='FFFF9999', fill_type='solid')
-for i in range(len(reservations)):
-  if i % 2 == 0:
-    for n in range(15):
-      template[("%s%i") % (chr(n+65), i + 2)].fill = red_color
-
-save_workbook(template_book)
+wb = EventBook()
+wb.load_workbook('reservations.xlsx')
+wb.save_workbook()
 
 
 
