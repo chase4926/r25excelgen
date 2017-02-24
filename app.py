@@ -21,7 +21,10 @@ import re
 
 
 def format_time(t):
-  return t.strftime("%I:%M %p")
+  time_string = t.strftime("%I:%M %p")
+  if time_string[0] == "0":
+    time_string = time_string[1:]
+  return time_string
 
 def time_to_datetime(t):
   current = date.today()
