@@ -27,6 +27,9 @@ def time_to_datetime(t):
   current = date.today()
   return datetime.combine(current, t)
 
+def time_between(t1, t2):
+  return abs(time_to_datetime(t1) - time_to_datetime(t2))
+
 def unicode_to_time(u):
   new_time = datetime.strptime(u.encode('ASCII', 'ignore'), '%I:%M %p')
   return time(new_time.hour, new_time.minute, new_time.second)
@@ -37,6 +40,8 @@ class Event:
     self.resource = None
     self.start = None
     self.end = None
+    self.delivery_window = None
+    self.pickup_window = None
   
   def add_resource(self, resource):
     if self.resource == None:
@@ -158,10 +163,13 @@ def get_delivery_time(rooms, event):
     end_event = events[-1]
     end_time = end_event.end
     if event.time_difference(end_event) < timedelta(minutes=15):
+      event.delivery_window = [end_time]
       return "@%s" % format_time(end_time)
     else:
+      event.delivery_window = [end_time, event.start]
       return "%s-%s" % (format_time(end_time), format_time(event.start))
   else:
+    event.delivery_window = ['OPEN']
     return 'OPEN'
 
 
@@ -175,10 +183,13 @@ def get_pickup_time(rooms, event):
     start_event = after_events[0]
     start_time = start_event.start
     if event.time_difference(start_event) < timedelta(minutes=15):
+      event.pickup_window = [start_time]
       return "@%s" % format_time(start_time)
     else:
+      event.pickup_window = [event.end, start_time]
       return "%s-%s" % (format_time(event.end), format_time(start_time))
   else:
+    event.pickup_window = ['OPEN']
     return 'OPEN'
 
 
@@ -215,6 +226,52 @@ def copy_rooms(rooms):
   return new_rooms
 
 
+def get_current_deliveries(reservations, td=2):
+  # Returns a list of tuples. (td = time difference in hours)
+  # tuples contain (event, priority) where priority is 1-100 with 100 being urgent
+  current_time = datetime.now().time()#.replace(hour=10).replace(minute=31)
+  result = list()
+  for event in reservations:
+    if len(event.delivery_window) == 1:
+      # Either OPEN or @
+      if event.delivery_window[0] == 'OPEN':
+        # Deliver before event.start
+        if current_time < event.start and time_between(current_time, event.start) < timedelta(hours=td):
+          result.append( (event, 1) ) # FIXME: Priority
+      else:
+        # Deliver right at [0]
+        if current_time < event.delivery_window[0] and time_between(current_time, event.delivery_window[0]) < timedelta(minutes=30):
+          result.append( (event, 1) ) # FIXME: Priority
+    else:
+      # Deliver after [0] and before [1]
+      if current_time > event.delivery_window[0] and current_time < event.delivery_window[1]:
+        result.append( (event, 1) ) # FIXME: Priority
+  return result
+
+
+def get_current_pickups(reservations, td=2):
+  # Returns a list of tuples. (td = time difference in hours)
+  # tuples contain (event, priority) where priority is 1-100 with 100 being urgent
+  current_time = datetime.now().time().replace(hour=9).replace(minute=28)
+  result = list()
+  for event in reservations:
+    if len(event.pickup_window) == 1:
+      #Either OPEN or @
+      if event.pickup_window[0] == 'OPEN':
+        # Pickup after event.end
+        if current_time > event.end and time_between(event.end, current_time) < timedelta(hours=td):
+          result.append( (event, 1) ) # FIXME: Priority
+      else:
+        # Pickup right at [0]
+        if current_time < event.pickup_window[0] and time_between(current_time, event.pickup_window[0]) < timedelta(minutes=30):
+          result.append( (event, 1) ) # FIXME: Priority
+    else:
+      # Pickup after [0] and before [1]
+      if current_time > event.pickup_window[0] and current_time < event.pickup_window[1]:
+        result.append( (event, 1) ) # FIXME: Priority
+  return result
+
+
 wb = load_workbook('reservations.xlsx')
 sheet = wb.active
 
@@ -249,13 +306,19 @@ for event in reservations:
   # Move to the next row
   i += 1
 
+
+
+def save_workbook(workbook):
+  workbook.save("%s.xlsx" % (datetime.now() + timedelta(days=1)).strftime("%b-%d"))
+
+# Save Excel Document for processed events
 red_color = PatternFill(start_color='FFFF9999', end_color='FFFF9999', fill_type='solid')
 for i in range(len(reservations)):
   if i % 2 == 0:
     for n in range(15):
       template[("%s%i") % (chr(n+65), i + 2)].fill = red_color
 
-template_book.save("%s.xlsx" % (datetime.now() + timedelta(days=1)).strftime("%b-%d"))
+save_workbook(template_book)
 
 
 
