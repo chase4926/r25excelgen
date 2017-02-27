@@ -48,7 +48,7 @@ def resource_common_name(resource):
     'Clickers 25': 'Clickers',
     'Clickers 52': 'Clickers-50',
     'Wireless Presenter': 'Presenter',
-  }.get(resource, '')
+  }.get(resource, resource)
 
 class Event:
   def __init__(self):
@@ -326,11 +326,20 @@ class EventBook:
 
 # Gui Code
 
+
+class UpdateEvent(cocos.actions.InstantAction):
+  def start(self):
+    self.target.update_events()
+
+
 class EventWindow(cocos.layer.Layer):
+  is_event_handler = True
+  
   def __init__(self):
     super(EventWindow, self).__init__()
     self.wb = EventBook()
     self.wb.load_workbook('reservations.xlsx')
+    self.wb.save_workbook() # Save the next days schedule automatically
     self.font = 'Arial'
     # Deliveries
     delivery_label = cocos.text.Label(
@@ -383,10 +392,11 @@ class EventWindow(cocos.layer.Layer):
       label.position = 1260, 640 - i*24
       self.pickup_slots.append(label)
       self.add(label)
-    self.update_events()
+    self.do(cocos.actions.Repeat(UpdateEvent() + cocos.actions.Delay(60)))
+    #self.update_events()
   
   def update_events(self):
-    current_time = datetime.now().time().replace(hour=10).replace(minute=31)
+    current_time = datetime.now().time()#.replace(hour=8).replace(minute=31)
     self.time_label.element.text = "Updated at %s" % format_time(current_time)
     # Clear old text
     for label in self.delivery_slots:
@@ -395,8 +405,11 @@ class EventWindow(cocos.layer.Layer):
       label.element.text = ''
     # Add new text
     for i, event in enumerate(self.wb.get_current_deliveries(current_time)):
+      delivery_time = event[0].get_delivery_time()
+      if delivery_time == 'OPEN':
+        delivery_time = "OPEN-%s" % format_time(event[0].start)
       self.delivery_slots[i].element.text = "%s | %s | %s" % (
-        event[0].get_delivery_time(), event[0].space,
+        delivery_time, event[0].space,
         ",".join([resource_common_name(a) for a in event[0].resource]))
     for i, event in enumerate(self.wb.get_current_pickups(current_time)):
       self.pickup_slots[i].element.text = "%s | %s | %s" % (
@@ -404,8 +417,6 @@ class EventWindow(cocos.layer.Layer):
         ",".join([resource_common_name(a) for a in event[0].resource]))
 
 # ---
-
-#wb.save_workbook()
 
 cocos.director.director.init(width=1280, height=720, caption="R25 Excel Gen")
 main_scene = cocos.scene.Scene(EventWindow())
