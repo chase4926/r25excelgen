@@ -110,25 +110,23 @@ class Event:
     else:
       return False
   
-  def get_pickup_str(self):
+  def get_pickup_time(self):
     if len(self.pickup_window) == 1:
       if self.pickup_window[0] == 'OPEN':
-        time = 'OPEN'
+        return 'OPEN'
       else:
-        time = "@%s" % format_time(self.pickup_window[0])
+        return "@%s" % format_time(self.pickup_window[0])
     else:
-      time = "%s-%s" % (format_time(self.pickup_window[0]), format_time(self.pickup_window[1]))
-    return "%s | %s | %s" % (time, self.space, ",".join([resource_common_name(a) for a in self.resource]))
+      return "%s-%s" % (format_time(self.pickup_window[0]), format_time(self.pickup_window[1]))
   
-  def get_delivery_str(self):
+  def get_delivery_time(self):
     if len(self.delivery_window) == 1:
       if self.delivery_window[0] == 'OPEN':
-        time = 'OPEN'
+        return 'OPEN'
       else:
-        time = "@%s" % format_time(self.delivery_window[0])
+        return "@%s" % format_time(self.delivery_window[0])
     else:
-      time = "%s-%s" % (format_time(self.delivery_window[0]), format_time(self.delivery_window[1]))
-    return "%s | %s | %s" % (time, self.space, ",".join([resource_common_name(a) for a in self.resource]))
+      return "%s-%s" % (format_time(self.delivery_window[0]), format_time(self.delivery_window[1]))
   
   def __repr__(self):
     return "%s - %s, %s, %s" % (format_time(self.start), format_time(self.end), self.space, self.resource)
@@ -237,26 +235,6 @@ class EventBook:
     else:
       event.delivery_window = ['OPEN']
   
-  def format_pickup_time(self, event):
-    window = event.pickup_window
-    if len(window) == 1:
-      if window[0] == 'OPEN':
-        return 'OPEN'
-      else:
-        return "@%s" % format_time(window[0])
-    else:
-      return "%s-%s" % (format_time(window[0]), format_time(window[1]))
-  
-  def format_delivery_time(self, event):
-    window = event.delivery_window
-    if len(window) == 1:
-      if window[0] == 'OPEN':
-        return 'OPEN'
-      else:
-        return "@%s" % format_time(window[0])
-    else:
-      return "%s-%s" % (format_time(window[0]), format_time(window[1]))
-  
   def format_space(self, space):
     result = space.split('_', 1)[1]
     return result.split(' ', 1)[0]
@@ -289,8 +267,8 @@ class EventBook:
           template["H%i" % i] = resource
         else:
           template["%s%i" % (resource_col, i)] = 'X'
-      template["J%i" % i] = self.format_delivery_time(event)
-      template["N%i" % i] = self.format_pickup_time(event)
+      template["J%i" % i] = event.get_delivery_time()
+      template["N%i" % i] = event.get_pickup_time()
       # Move to the next row
       i += 1
     
@@ -417,9 +395,13 @@ class EventWindow(cocos.layer.Layer):
       label.element.text = ''
     # Add new text
     for i, event in enumerate(self.wb.get_current_deliveries(current_time)):
-      self.delivery_slots[i].element.text = event[0].get_delivery_str()
+      self.delivery_slots[i].element.text = "%s | %s | %s" % (
+        event[0].get_delivery_time(), event[0].space,
+        ",".join([resource_common_name(a) for a in event[0].resource]))
     for i, event in enumerate(self.wb.get_current_pickups(current_time)):
-      self.pickup_slots[i].element.text = event[0].get_pickup_str()
+      self.pickup_slots[i].element.text = "%s | %s | %s" % (
+        event[0].get_pickup_time(), event[0].space,
+        ",".join([resource_common_name(a) for a in event[0].resource]))
 
 # ---
 
