@@ -60,7 +60,8 @@ class Event:
     self.end = None
     self.delivery_window = None
     self.pickup_window = None
-    self.done = False
+    self.delivery_done = False
+    self.pickup_done = False
   
   def add_resource(self, resource):
     if self.resource == None:
@@ -416,14 +417,14 @@ class EventWindow(cocos.layer.Layer):
       if delivery_time == 'OPEN':
         delivery_time = "OPEN-%s" % format_time(event[0].start)
       self.delivery_slots[i][1] = event[0]
-      if event[0].done:
+      if event[0].delivery_done:
         self.delivery_slots[i][0].element.color = (255, 0, 0, 255)
       self.delivery_slots[i][0].element.text = "%s | %s | %s" % (
         delivery_time, event[0].space,
         ",".join([resource_common_name(a) for a in event[0].resource]))
     for i, event in enumerate(self.wb.get_current_pickups(current_time)):
       self.pickup_slots[i][1] = event[0]
-      if event[0].done:
+      if event[0].pickup_done:
         self.pickup_slots[i][0].element.color = (255, 0, 0, 255)
       self.pickup_slots[i][0].element.text = "%s | %s | %s" % (
         event[0].get_pickup_time(), event[0].space,
@@ -439,20 +440,20 @@ class EventWindow(cocos.layer.Layer):
       if x < 640:
         #Deliveries
         if self.delivery_slots[i][1] != None:
-          if self.delivery_slots[i][1].done:
-            self.delivery_slots[i][1].done = False
+          if self.delivery_slots[i][1].delivery_done:
+            self.delivery_slots[i][1].delivery_done = False
             self.delivery_slots[i][0].element.color = (255, 255, 255, 255)
           else:
-            self.delivery_slots[i][1].done = True
+            self.delivery_slots[i][1].delivery_done = True
             self.delivery_slots[i][0].element.color = (255, 0, 0, 255)
       else:
         #Pickups
         if self.pickup_slots[i][1] != None:
-          if self.pickup_slots[i][1].done:
-            self.pickup_slots[i][1].done = False
+          if self.pickup_slots[i][1].pickup_done:
+            self.pickup_slots[i][1].pickup_done = False
             self.pickup_slots[i][0].element.color = (255, 255, 255, 255)
           else:
-            self.pickup_slots[i][1].done = True
+            self.pickup_slots[i][1].pickup_done = True
             self.pickup_slots[i][0].element.color = (255, 0, 0, 255)
 
 # ---
