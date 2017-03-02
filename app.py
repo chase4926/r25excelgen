@@ -18,7 +18,9 @@ from datetime import time
 from datetime import *
 from collections import defaultdict
 import re
+import math
 import cocos
+import pyglet
 
 
 def format_time(t):
@@ -58,6 +60,7 @@ class Event:
     self.end = None
     self.delivery_window = None
     self.pickup_window = None
+    self.done = False
   
   def add_resource(self, resource):
     if self.resource == None:
@@ -378,7 +381,7 @@ class EventWindow(cocos.layer.Layer):
         anchor_x = 'left', anchor_y = 'center'
       )
       label.position = 20, 640 - i*24
-      self.delivery_slots.append(label)
+      self.delivery_slots.append([label, None])
       self.add(label)
     # Pickup labels
     self.pickup_slots = list()
@@ -390,31 +393,67 @@ class EventWindow(cocos.layer.Layer):
         anchor_x = 'right', anchor_y = 'center'
       )
       label.position = 1260, 640 - i*24
-      self.pickup_slots.append(label)
+      self.pickup_slots.append([label, None])
       self.add(label)
     self.do(cocos.actions.Repeat(UpdateEvent() + cocos.actions.Delay(60)))
     #self.update_events()
   
   def update_events(self):
-    current_time = datetime.now().time()#.replace(hour=8).replace(minute=31)
+    current_time = datetime.now().time()#.replace(hour=10).replace(minute=31)
     self.time_label.element.text = "Updated at %s" % format_time(current_time)
     # Clear old text
-    for label in self.delivery_slots:
-      label.element.text = ''
-    for label in self.pickup_slots:
-      label.element.text = ''
+    for label_event in self.delivery_slots:
+      label_event[0].element.text = ''
+      label_event[0].element.color = (255, 255, 255, 255)
+      label_event[1] = None
+    for label_event in self.pickup_slots:
+      label_event[0].element.text = ''
+      label_event[0].element.color = (255, 255, 255, 255)
+      label_event[1] = None
     # Add new text
     for i, event in enumerate(self.wb.get_current_deliveries(current_time)):
       delivery_time = event[0].get_delivery_time()
       if delivery_time == 'OPEN':
         delivery_time = "OPEN-%s" % format_time(event[0].start)
-      self.delivery_slots[i].element.text = "%s | %s | %s" % (
+      self.delivery_slots[i][1] = event[0]
+      if event[0].done:
+        self.delivery_slots[i][0].element.color = (255, 0, 0, 255)
+      self.delivery_slots[i][0].element.text = "%s | %s | %s" % (
         delivery_time, event[0].space,
         ",".join([resource_common_name(a) for a in event[0].resource]))
     for i, event in enumerate(self.wb.get_current_pickups(current_time)):
-      self.pickup_slots[i].element.text = "%s | %s | %s" % (
+      self.pickup_slots[i][1] = event[0]
+      if event[0].done:
+        self.pickup_slots[i][0].element.color = (255, 0, 0, 255)
+      self.pickup_slots[i][0].element.text = "%s | %s | %s" % (
         event[0].get_pickup_time(), event[0].space,
         ",".join([resource_common_name(a) for a in event[0].resource]))
+  
+  def mouse_y_to_label_i(self, y, label_y=640, label_spacing=24):
+    # Converts mouse y coordinate to label index
+    return int(math.floor((y-label_y-(label_spacing/2))/(label_spacing*1.0))*-1)-1
+  
+  def on_mouse_press(self, x, y, button, mod):
+    i = self.mouse_y_to_label_i(y)
+    if button == 1 and 0 <= i < len(self.delivery_slots):
+      if x < 640:
+        #Deliveries
+        if self.delivery_slots[i][1] != None:
+          if self.delivery_slots[i][1].done:
+            self.delivery_slots[i][1].done = False
+            self.delivery_slots[i][0].element.color = (255, 255, 255, 255)
+          else:
+            self.delivery_slots[i][1].done = True
+            self.delivery_slots[i][0].element.color = (255, 0, 0, 255)
+      else:
+        #Pickups
+        if self.pickup_slots[i][1] != None:
+          if self.pickup_slots[i][1].done:
+            self.pickup_slots[i][1].done = False
+            self.pickup_slots[i][0].element.color = (255, 255, 255, 255)
+          else:
+            self.pickup_slots[i][1].done = True
+            self.pickup_slots[i][0].element.color = (255, 0, 0, 255)
 
 # ---
 
