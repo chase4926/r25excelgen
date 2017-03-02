@@ -298,11 +298,11 @@ class EventBook:
             result.append( (event, 1) ) # FIXME: Priority
         else:
           # Deliver right at [0]
-          if current_time < event.delivery_window[0] and time_between(current_time, event.delivery_window[0]) < timedelta(minutes=30):
+          if current_time < event.delivery_window[0] and time_between(current_time, event.delivery_window[0]) < timedelta(minutes=60):
             result.append( (event, 1) ) # FIXME: Priority
       else:
         # Deliver after [0] and before [1]
-        if current_time > event.delivery_window[0] and current_time < event.delivery_window[1] and time_between(current_time, event.delivery_window[1]) < timedelta(hours=td):
+        if (current_time > event.delivery_window[0] and current_time < event.delivery_window[1] and time_between(current_time, event.delivery_window[1]) < timedelta(hours=td))  or time_between(current_time, event.delivery_window[0]) < timedelta(minutes=60):
           result.append( (event, 1) ) # FIXME: Priority
     return result
   
@@ -319,11 +319,11 @@ class EventBook:
             result.append( (event, 1) ) # FIXME: Priority
         else:
           # Pickup right at [0]
-          if current_time < event.pickup_window[0] and time_between(current_time, event.pickup_window[0]) < timedelta(minutes=30):
+          if current_time < event.pickup_window[0] and time_between(current_time, event.pickup_window[0]) < timedelta(minutes=60):
             result.append( (event, 1) ) # FIXME: Priority
       else:
         # Pickup after [0] and before [1]
-        if current_time > event.pickup_window[0] and current_time < event.pickup_window[1]:
+        if (current_time > event.pickup_window[0] and current_time < event.pickup_window[1]) or time_between(current_time, event.pickup_window[0]) < timedelta(minutes=60):
           result.append( (event, 1) ) # FIXME: Priority
     return result
 
