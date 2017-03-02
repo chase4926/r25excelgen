@@ -19,7 +19,10 @@ from datetime import *
 from collections import defaultdict
 import re
 import math
+import glob
 import cocos
+from cocos.audio.pygame.mixer import Sound
+from cocos.audio.pygame import mixer
 import pyglet
 
 
@@ -51,6 +54,11 @@ def resource_common_name(resource):
     'Clickers 52': 'Clickers-50',
     'Wireless Presenter': 'Presenter',
   }.get(resource, resource)
+
+class Audio(Sound):
+  def __init__(self, audio_file):
+    # As stated above, we initialize the super class with the audio file we passed in
+    super(Audio, self).__init__(audio_file)
 
 class Event:
   def __init__(self):
@@ -298,7 +306,7 @@ class EventBook:
             result.append( (event, 1) ) # FIXME: Priority
         else:
           # Deliver right at [0]
-          if current_time < event.delivery_window[0] and time_between(current_time, event.delivery_window[0]) < timedelta(minutes=30):
+          if current_time < event.delivery_window[0] and time_between(current_time, event.delivery_window[0]) < timedelta(minutes=60):
             result.append( (event, 1) ) # FIXME: Priority
       else:
         # Deliver after [0] and before [1]
@@ -319,11 +327,11 @@ class EventBook:
             result.append( (event, 1) ) # FIXME: Priority
         else:
           # Pickup right at [0]
-          if current_time < event.pickup_window[0] and time_between(current_time, event.pickup_window[0]) < timedelta(minutes=30):
+          if current_time < event.pickup_window[0] and time_between(current_time, event.pickup_window[0]) < timedelta(minutes=60):
             result.append( (event, 1) ) # FIXME: Priority
       else:
         # Pickup after [0] and before [1]
-        if current_time > event.pickup_window[0] and current_time < event.pickup_window[1]:
+        if (current_time > event.pickup_window[0] and current_time < event.pickup_window[1]) or time_between(current_time, event.pickup_window[0]) < timedelta(minutes=60):
           result.append( (event, 1) ) # FIXME: Priority
     return result
 
@@ -397,7 +405,29 @@ class EventWindow(cocos.layer.Layer):
       self.pickup_slots.append([label, None])
       self.add(label)
     self.do(cocos.actions.Repeat(UpdateEvent() + cocos.actions.Delay(60)))
-    #self.update_events()
+    self.audio_assets = self.load_audio_assets()
+    self.promode = False
+    self.promode_last_time = datetime.now().time()
+    self.promode_count = 0
+    self.promode_order = ('first_blood.wav', 'double_kill.wav', 'megakill.wav', 'ultrakill.wav', 'Monsterkill_F.wav', 'godlike.wav')
+  
+  def load_audio_assets(self, folder='assets'):
+    result = dict()
+    for filename in glob.glob("%s/*.wav" % folder):
+      filename = filename.replace('\\', '/')
+      result[filename.split("%s/"%folder)[1]] = Audio(filename)
+    return result
+  
+  def done_event(self):
+    if self.promode:
+      if self.promode_count == 0 or time_between(self.promode_last_time, datetime.now().time()) > timedelta(seconds=30):
+        self.promode_count = 1
+        self.audio_assets[self.promode_order[self.promode_count-1]].play()
+      else:
+        if self.promode_count < len(self.promode_order):
+          self.promode_count += 1
+        self.audio_assets[self.promode_order[self.promode_count-1]].play()
+      self.promode_last_time = datetime.now().time()
   
   def update_events(self):
     current_time = datetime.now().time()#.replace(hour=10).replace(minute=31)
@@ -434,6 +464,10 @@ class EventWindow(cocos.layer.Layer):
     # Converts mouse y coordinate to label index
     return int(math.floor((y-label_y-(label_spacing/2))/(label_spacing*1.0))*-1)-1
   
+  def on_key_press(self, key, mod):
+    if key == 65479: # F10
+      self.promode = not self.promode
+  
   def on_mouse_press(self, x, y, button, mod):
     i = self.mouse_y_to_label_i(y)
     if button == 1 and 0 <= i < len(self.delivery_slots):
@@ -444,6 +478,7 @@ class EventWindow(cocos.layer.Layer):
             self.delivery_slots[i][1].delivery_done = False
             self.delivery_slots[i][0].element.color = (255, 255, 255, 255)
           else:
+            self.done_event()
             self.delivery_slots[i][1].delivery_done = True
             self.delivery_slots[i][0].element.color = (255, 0, 0, 255)
       else:
@@ -453,12 +488,14 @@ class EventWindow(cocos.layer.Layer):
             self.pickup_slots[i][1].pickup_done = False
             self.pickup_slots[i][0].element.color = (255, 255, 255, 255)
           else:
+            self.done_event()
             self.pickup_slots[i][1].pickup_done = True
             self.pickup_slots[i][0].element.color = (255, 0, 0, 255)
 
 # ---
 
 cocos.director.director.init(width=1280, height=720, caption="R25 Excel Gen")
+mixer.init()
 main_scene = cocos.scene.Scene(EventWindow())
 cocos.director.director.run(main_scene)
 
